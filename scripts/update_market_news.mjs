@@ -49,36 +49,16 @@ function namedEntities(title) {
   return names.slice(0, 3);
 }
 
-async function translateBatch(batch) {
-  const {stdout}=await runFile("curl",[
-    "-fsS","--max-time","15","--get",
-    "--data-urlencode","client=gtx","--data-urlencode","sl=en",
-    "--data-urlencode","tl=zh-CN","--data-urlencode","dt=t",
-    "--data-urlencode","q="+batch.map(x=>x.title).join("\n"),
-    "https://translate.googleapis.com/translate_a/single"
-  ],{maxBuffer:2_000_000,timeout:18000});
-  const payload=JSON.parse(stdout);
-  const translated=payload[0].map(part=>part[0]).join("").trim().split("\n").map(s=>s.trim());
-  if (translated.length!==batch.length || translated.some(s=>!/[\u3400-\u9fff]/.test(s))) throw Error("Incomplete translation batch");
-  return translated;
-}
 async function translateItems(items) {
-  const batches = [];
-  for (let i=0;i<items.length;i+=10) batches.push(items.slice(i,i+10));
-  let errors=0;
-  const translated=[];
-  for (const batch of batches) {
-    try {
-      let lines;
-      try { lines=await translateBatch(batch); }
-      catch { lines=await translateBatch(batch); }
-      translated.push(...batch.map((item,i)=>({...item,titleZh:lines[i],entities:namedEntities(item.title)})));
-    } catch (error) {
-      if (process.env.MARKET_DEBUG) console.log("translation batch failed",String(error));
-      errors+=batch.length;
-    }
-  }
-  return {items:translated,errors};
+  if (!items.length) return {items:[],errors:0};
+  const script = new URL("./translate_headlines.py", import.meta.url).pathname;
+  const {stdout}=await runFile(process.env.MARKET_PYTHON || "python3",[script,...items.map(x=>x.title)],
+    {maxBuffer:2_000_000,timeout:240000});
+  const lines=JSON.parse(stdout);
+  if (!Array.isArray(lines) || lines.length!==items.length) throw Error("Incomplete offline translation");
+  const translated=items.map((item,i)=>({...item,titleZh:String(lines[i]||"").trim(),entities:namedEntities(item.title)}))
+    .filter(item=>/[\u3400-\u9fff]/.test(item.titleZh));
+  return {items:translated,errors:items.length-translated.length};
 }
 
 const searches = [
