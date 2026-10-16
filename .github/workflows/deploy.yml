@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: "24"
       - name: 抓取新闻并生成中文标题
-        run: node scripts/update_market_news.mjs
+        run: MARKET_DEBUG=1 node scripts/update_market_news.mjs || echo "沿用最近成功的中文数据"
       - uses: actions/configure-pages@v5
       - name: 整理静态网站
         run: |
