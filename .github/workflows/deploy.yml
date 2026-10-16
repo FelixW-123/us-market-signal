@@ -19,14 +19,32 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/argos-translate/packages
+          key: argos-en-zh-1-9
+      - name: 准备离线翻译
+        run: |
+          python -m pip install --disable-pip-version-check -r scripts/requirements.txt
+          if [ ! -d "$HOME/.local/share/argos-translate/packages/translate-en_zh-1_9" ]; then
+            curl -fL --retry 3 --retry-all-errors --max-time 120 \
+              https://data.argosopentech.com/argospm/v1/translate-en_zh-1_9.argosmodel \
+              -o /tmp/translate-en_zh-1_9.argosmodel
+            python -c 'import argostranslate.package; argostranslate.package.install_from_path("/tmp/translate-en_zh-1_9.argosmodel")'
+          fi
       - name: 抓取新闻并生成中文标题
-        run: MARKET_DEBUG=1 node scripts/update_market_news.mjs || echo "沿用最近成功的中文数据"
+        run: node scripts/update_market_news.mjs
       - uses: actions/configure-pages@v5
       - name: 整理静态网站
         run: |
